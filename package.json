@@ -1,0 +1,13 @@
+{
+  "name": "ac-dash-prototype-checks",
+  "version": "0.6.2",
+  "private": true,
+  "description": "Optional development checks; Node is not required to run the dashboard",
+  "scripts": {
+    "test": "node test_frontend.cjs && node test_tyre_colour.cjs && node test_bridge_boot.cjs"
+  },
+  "devDependencies": {
+    "fengari": "0.1.5",
+    "luaparse": "0.3.1"
+  }
+}

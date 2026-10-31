@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'web/app.js'),'utf8');
+const code=source.slice(source.indexOf('function tyreColour('),source.indexOf('function lapTime('));
+const context={available:x=>typeof x==='number'&&Number.isFinite(x),clamp:(n,a,b)=>Math.max(a,Math.min(b,n)),prefs:{low:75,high:100}};
+vm.createContext(context);vm.runInContext(code,context);
+const curve=[[60,.9],[80,1],[90,1],[110,.96]];
+assert.equal(context.tyreColour(85,curve,90),'rgb(0,255,0)');
+assert.equal(context.tyreColour(60,curve,90),'rgb(0,0,255)');
+assert.equal(context.tyreColour(100,curve,90),'rgb(255,0,0)');
+assert.equal(context.tyreColour(null,curve,90),'#46505d');
+console.log('Tyre palette: cold/optimal/hot/missing cases passed against a sample thermal curve.');
