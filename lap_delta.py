@@ -17,6 +17,7 @@ class LapDelta:
     def reset(self):
         self.reference = None
         self.best_ms = None
+        self.reset_counter = None
         self.interrupt()
 
     def interrupt(self):
@@ -71,14 +72,20 @@ class LapDelta:
                 self.storage_error=None
             except OSError as error:self.storage_error=str(error)
 
-    def update(self, completed, progress, current_ms, last_ms, valid=True):
+    def update(self, completed, progress, current_ms, last_ms, valid=True, last_valid=None, reset_counter=None):
+        if reset_counter is not None:
+            if self.reset_counter is not None and reset_counter != self.reset_counter:
+                self.interrupt()
+            self.reset_counter = reset_counter
         if not math.isfinite(progress) or not 0 <= progress <= 1 or current_ms < 0:
             self.interrupt();return None
         previous=self.last
         crossed=previous and (completed==previous[0]+1 or (progress<.1 and previous[1]>.9 and current_ms<previous[2]))
         if crossed:
+            if last_valid is False:self.invalid=True
             self.finish(previous[0],last_ms if last_ms>0 else previous[2]);self.interrupt()
         elif previous and (completed<previous[0] or completed>previous[0]+1 or progress<previous[1]-.02 or current_ms<previous[2]-100):
+            self.invalid=True # A reset/teleport is not a completed valid lap.
             self.finish(previous[0],previous[2]);self.interrupt()
         if not self.started and valid and progress<=.03 and current_ms<=5000:
             self.started=True;self.collecting=True;self.points=[(0.,0)]
@@ -89,7 +96,7 @@ class LapDelta:
         self.last=(completed,progress,current_ms)
         self.state=('Lap invalid / out lap' if self.invalid else 'Recording first full lap' if self.collecting and self.reference is None else 'Recording lap' if self.collecting else 'Partial lap · next lap will record')
         if self.storage_error:self.state='Lap storage error · check folder access'
-        if not valid or not self.reference:return None
+        if self.invalid or not valid or not self.reference:return None
         i=bisect.bisect_right(self.reference,(progress,float('inf')))
         if i==0:return None
         if i>=len(self.reference):return round((current_ms-self.best_ms)/1000,3)

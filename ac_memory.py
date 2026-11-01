@@ -206,7 +206,14 @@ class ACReader:
                 self.context = context
             delta = self.delta.update(g.completedLaps, g.normalizedCarPosition,
                                       g.iCurrentTime, g.iLastTime,
-                                      p.numberOfTyresOut <= 2 and g.penaltyTime <= 0 and not g.isInPit and extra.get('lap_valid',True))
+                                      p.numberOfTyresOut <= 2 and g.penaltyTime <= 0 and not (g.isInPit or g.isInPitLane) and extra.get('lap_valid',True),
+                                      last_valid=extra.get('last_lap_valid'),reset_counter=extra.get('reset_counter'))
+            delta_source='recorded best' if delta is not None else None
+            # CSP documents performanceMeter in seconds against AC's session best.
+            # Useful when this app joined mid-lap and has no sampled reference yet.
+            native=extra.get('native_delta')
+            if delta is None and not self.delta.invalid and extra.get('lap_valid') is True and extra.get('native_best_ms',0)>0 and isinstance(native,(float,int)) and math.isfinite(native):
+                delta=round(native,3);delta_source='AC session best'
             result = {"status": "live", "message": "LIVE · Assetto Corsa",
                     "speed": round(max(0, p.speedKmh), 1), "rpm": max(0, p.rpms),
                     "gear": "R" if p.gear == 0 else "N" if p.gear == 1 else str(p.gear - 1),
@@ -231,9 +238,13 @@ class ACReader:
                     "last_lap_ms": g.iLastTime if g.iLastTime > 0 else None,
                     "best_lap_ms": g.iBestTime if g.iBestTime > 0 else None,
                     "delta": delta, "delta_reference_ms": self.delta.best_ms,
+                    "delta_source":delta_source,"current_lap_invalid":self.delta.invalid,
+                    "track_limits":p.numberOfTyresOut>2 or (extra.get('lap_valid') is False and not (g.isInPit or g.isInPitLane)),
+                    "damage_body":[finite(v,0,100000) for v in p.carDamage[:4]],
                     "delta_state": self.delta.state, "recorded_laps":len(self.delta.history),
                     "flag": g.flag, "in_pit": bool(g.isInPit or g.isInPitLane)}
             result.update(extra)
+            result['in_pit']=bool(g.isInPit or g.isInPitLane or extra.get('in_pit') or extra.get('in_pit_lane'))
             result['gear_count'], result['gear_count_source'] = resolve_gears(result.get('gear_count'))
             result['position'], result['position_source'] = resolve_race_position(g.position,extra)
             return result

@@ -6,6 +6,24 @@ from lap_delta import LapDelta
 
 
 class RecordingTests(unittest.TestCase):
+    def test_last_lap_validity_rejects_late_cut(self):
+        d=LapDelta();d.update(0,.001,10,0)
+        d.update(0,.99,9900,0)
+        d.update(1,.001,10,10000,last_valid=False)
+        self.assertIsNone(d.reference)
+        self.assertEqual(d.history[-1]['status'],'invalid')
+
+    def test_reset_cannot_create_a_reference(self):
+        d=LapDelta();d.update(0,.001,10,0,reset_counter=0)
+        d.update(0,.99,9900,0,reset_counter=0)
+        d.update(1,.001,10,10000,reset_counter=1)
+        self.assertIsNone(d.reference)
+
+    def test_invalid_lap_stays_invalid_after_rejoining(self):
+        d=LapDelta();self.full_first_lap(d)
+        d.update(1,.4,4000,10000,False)
+        self.assertIsNone(d.update(1,.5,5100,10000,True))
+
     def full_first_lap(self,d):
         d.update(0,0,0,0,valid=False) # Waiting in pits before driving.
         d.update(0,.001,10,0,valid=True)

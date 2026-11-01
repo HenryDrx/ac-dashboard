@@ -6,6 +6,28 @@ const defaults = {maxRpm:null, shift:90, low:75, high:100, history:10};
 let scaleLimit = null;
 let prefs = {...defaults}, carKey = '', current = null, history = [], gTrail = [];
 let lastMessage = 0, lastFrame = 0, connected = false, offlineMessage = '';
+let previousPit=null,previousInvalid=false,pitOwnsPage=false,lapIdentity='',alertUntil=0;
+function pitState(data){return !!(data?.in_pit||data?.in_pit_lane);}
+function sessionAlert(message){
+  const node=el('session-alert');node.querySelector('strong').textContent=message;
+  node.hidden=false;node.classList.remove('announce');void node.offsetWidth;node.classList.add('announce');
+  alertUntil=performance.now()+1700;
+}
+function updateSessionEvents(data,changedCar){
+  const pit=pitState(data),identity=`${data.car}/${data.track}/${data.session}/${data.lap}`;
+  if(changedCar){previousPit=null;previousInvalid=false;pitOwnsPage=false;}
+  if(identity!==lapIdentity){lapIdentity=identity;previousInvalid=false;}
+  const invalid=!!(data.current_lap_invalid||data.lap_valid===false||data.track_limits);
+  el('lap-time').classList.toggle('invalid',invalid);
+  if(data.track_limits&&!previousInvalid&&!pit)sessionAlert('TRACK LIMITS');
+  previousInvalid=invalid;
+  if(navigationBusy)return; // Retry pit transitions after a manual slide finishes.
+  if(pit&&previousPit!==true){
+    if(previousPit===false)sessionAlert('PITS');
+    controlContext='auto';controlTab='pitplan';showPage('controls');pitOwnsPage=true;
+  }else if(!pit&&previousPit===true&&pitOwnsPage){if(activePage==='controls')showPage('dashboard');pitOwnsPage=false;}
+  previousPit=pit;
+}
 const niceName = s => (s || '').replace(/^ks_/, '').replaceAll('_', ' ').replace(/\s+/g, ' ').trim().toUpperCase();
 function tyreColour(temp,curve,optimum){
   if(!available(temp))return '#46505d';
@@ -71,6 +93,10 @@ function clear(message) {
   if (offlineMessage === message && !current) return;
   offlineMessage = message;
   current = null; history = []; gTrail = [];
+  previousPit=null;previousInvalid=false;pitOwnsPage=false;
+  el('race-line').hidden=true;el('lap-time').classList.remove('invalid');el('session-alert').hidden=true;
+  for(const id of ['throttle','brake']){el(`${id}-fill`).style.height='0%';el(`${id}-pct`).textContent='—';}
+  el('delta-meter-fill').style.width='0%';
   el('badge').textContent = 'OFFLINE'; el('badge').className = '';
   el('status').textContent = message;
   el('footer-state').textContent = message;
@@ -122,13 +148,17 @@ function render(data) {
   el('lap').textContent = available(data.lap) ? String(data.lap).padStart(2,'0') : '—';
   el('lap-time').textContent = lapTime(data.lap_ms); el('best').textContent = lapTime(data.best_lap_ms);
   el('fuel').textContent = available(data.fuel) ? `${data.fuel.toFixed(1)} L` : '—';
-  el('delta').textContent = available(data.delta) ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta).toFixed(3)}` : '—.---';
+  el('delta').textContent = available(data.delta) ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta).toFixed(3)}` : data.current_lap_invalid?'INVALID':data.delta_reference_ms?'WAIT':'LEARN';
   el('delta').className = available(data.delta) ? (data.delta < 0 ? 'ahead' : 'behind') : '';
-  el('delta-note').textContent = available(data.delta) ? 'vs recorded best' : data.delta_state || (data.delta_reference_ms ? 'Delta unavailable' : 'Learning lap');
+  el('delta-note').textContent = available(data.delta) ? `vs ${data.delta_source||'recorded best'}` : data.delta_state || (data.delta_reference_ms ? 'Delta unavailable' : 'Learning lap');
+  el('delta').title=el('delta-note').textContent;
+  const meter=el('delta-meter-fill'),fraction=available(data.delta)?clamp(Math.abs(data.delta)/2,0,1)*50:0;
+  meter.style.width=`${fraction}%`;meter.style.left=data.delta<0?`${50-fraction}%`:'50%';meter.style.background=data.delta<0?'var(--green)':'var(--red)';
   const racePosition = typeof data.is_race==='boolean'?data.is_race:data.session===2;
-  document.querySelector('.session-line').classList.toggle('race-position',racePosition);
-  el('session-label').textContent = racePosition ? 'RACE POSITION' : 'LAP PROGRESS';
-  el('session-value').textContent = racePosition ? (available(data.position)&&data.position>0?`P${data.position}`:'—') : available(data.lap_progress) ? `${Math.round(data.lap_progress*100)}%` : '—';
+  el('race-line').hidden=!racePosition;
+  el('race-position').textContent=available(data.position)&&data.position>0?`P${data.position}`:'—';
+  el('session-label').textContent='LAP PROGRESS';
+  el('session-value').textContent=available(data.lap_progress)?`${Math.round(data.lap_progress*100)}%`:'—';
   el('progress-fill').style.width = `${available(data.lap_progress) ? clamp(data.lap_progress*100,0,100) : 0}%`;
   el('flag').textContent = data.in_pit ? 'PIT' : ({1:'BLUE FLAG',2:'YELLOW FLAG',3:'BLACK FLAG',4:'WHITE FLAG',5:'CHEQUERED',6:'PENALTY'}[data.flag] || '');
   setAid('tc',data.tc_mode??null); setAid('abs',data.abs_mode??null); setAid('drs',data.drs,'switch'); setAid('kers',data.kers,'charge');
@@ -171,11 +201,13 @@ function render(data) {
   el('rpm-strip').classList.toggle('shift',shift); el('shift-label').textContent = shift ? 'SHIFT' : pct === null ? 'SET RPM LIMIT' : 'RPM';
   el('g-value').textContent = available(data.g_lateral) && available(data.g_longitudinal) ? `${Math.hypot(data.g_lateral,data.g_longitudinal).toFixed(2)} G` : '—';
   for (const id of ['throttle','brake']) el(id).textContent = available(data[id]) ? `${Math.round(data[id])}%` : '—';
+  for(const id of ['throttle','brake']){el(`${id}-fill`).style.height=`${available(data[id])?clamp(data[id],0,100):0}%`;el(`${id}-pct`).textContent=available(data[id])?`${Math.round(data[id])}%`:'—';}
   const now=performance.now();
   history.push({t:now,throttle:data.throttle,brake:data.brake,gear:data.gear==='R' ? -1 : data.gear==='N' ? 0 : Number(data.gear)});
   history=history.filter(s=>now-s.t<=20000);
   if (available(data.g_lateral) && available(data.g_longitudinal)) gTrail.push({t:now,x:data.g_lateral,y:data.g_longitudinal});
-  gTrail=gTrail.filter(s=>now-s.t<1200);
+  gTrail=gTrail.filter(s=>now-s.t<15000);
+  updateSessionEvents(data,changedCar);
 }
 function canvasFor(id) {
   const canvas=el(id), box=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio || 1;
@@ -204,6 +236,10 @@ function drawG(now) {
   if (!current) return;
   function point(s){return [x+clamp(s.x/2,-1,1)*r,y-clamp(s.y/2,-1,1)*r];}
   const trail=gTrail.filter(s=>now-s.t<1200);
+  // Recent 15-second directional envelope, separate from the short moving trail.
+  const bins=Array(36).fill(0);
+  for(const s of gTrail.filter(s=>now-s.t<15000)){const angle=(Math.atan2(s.y,s.x)+Math.PI*2)%(Math.PI*2),i=Math.floor(angle/(Math.PI*2)*36);bins[i]=Math.max(bins[i],Math.hypot(s.x,s.y));}
+  c.beginPath();bins.forEach((v,i)=>{const a=(i+.5)/36*Math.PI*2,p=point({x:Math.cos(a)*v,y:Math.sin(a)*v});i?c.lineTo(...p):c.moveTo(...p);});c.closePath();c.fillStyle='#74b9ef20';c.strokeStyle='#74b9ef99';c.fill();c.stroke();
   c.lineWidth=1.5;c.strokeStyle='#bba544';c.beginPath();trail.forEach((s,i)=>{const p=point(s);i?c.lineTo(...p):c.moveTo(...p);});c.stroke();
   if (trail.length){const p=point(trail.at(-1));c.fillStyle='#f4d34c';c.beginPath();c.arc(...p,4,0,Math.PI*2);c.fill();}
 }
@@ -228,7 +264,8 @@ function drawHistory(now) {
   }
 }
 function frame(now) {
-  if(now-lastFrame>25){if(activePage==='dashboard'){drawG(now);drawHistory(now);}else if(activePage==='map'){drawMap();drawRadar();}lastFrame=now;}
+  if(now>alertUntil)el('session-alert').hidden=true;
+  if(now-lastFrame>25){if(activePage==='dashboard'){drawG(now);drawHistory(now);}else if(activePage==='map'){drawMap();drawRadar();drawDamage();}lastFrame=now;}
   requestAnimationFrame(frame);
 }
 function connect() {
@@ -358,7 +395,7 @@ const pitGroups={
     select('setup-file','Saved setup',['Baseline','Qualifying','Race','Wet']),action('load-setup','Load setup'),
     action('save-setup','Save current setup'),action('reset-setup','Reset to baseline'),action('drive','Go to track')]}
 };
-function resolvedControlMode(){return controlContext==='auto'?(current?.in_pit?'pits':'driving'):controlContext;}
+function resolvedControlMode(){return controlContext==='auto'?(pitState(current)?'pits':'driving'):controlContext;}
 let activePage='dashboard',navigationBusy=false;
 const pageOrder=['map','dashboard','controls'];
 function pageNode(page){return el(page==='dashboard'?'dashboard':`${page}-page`);}
@@ -494,11 +531,13 @@ function updateCarBadge(car){
   image.src='/api/car-badge?'+new URLSearchParams({car});
 }
 let mapKey='',mapInfo=null,mapImage=null,mapGeneration=0;
+let mapView={zoom:1,x:0,y:0};
+function resetMap(){mapView={zoom:1,x:0,y:0};}
 function trackKey(data){return data?.status==='mock'?'demo':`${data?.track||''}/${data?.track_layout||''}`;}
 async function ensureMap(){
   if(!current)return;
   const key=trackKey(current);if(key===mapKey)return;
-  mapKey=key;mapInfo=null;mapImage=null;const generation=++mapGeneration;
+  mapKey=key;mapInfo=null;mapImage=null;resetMap();const generation=++mapGeneration;
   if(current.status==='mock'){mapInfo={available:true,demo:true};return;}
   el('map-message').textContent='Loading the current track layout…';
   try{
@@ -518,16 +557,27 @@ function drawMap(){
   el('map-speed').textContent=current?`${Math.round(current.speed)} KM/H`:'— KM/H';
   el('map-caption').textContent=current?.status==='mock'?'SIMULATED CIRCUIT / POSITION · SWIPE LEFT TO RETURN':`${niceName(current?.track_layout||mapInfo?.layout)||'CURRENT LAYOUT'} · SWIPE LEFT TO RETURN`;
   let point=null,forward=null;
+  c.save();c.translate(w/2+mapView.x,h/2+mapView.y);c.scale(mapView.zoom,mapView.zoom);c.translate(-w/2,-h/2);
+  function opponent(p,look,label){
+    c.save();c.translate(...p);c.fillStyle='#74b9ef';c.strokeStyle='#090c10';c.lineWidth=1.5/mapView.zoom;
+    c.beginPath();c.arc(0,0,4/mapView.zoom,0,Math.PI*2);c.fill();c.stroke();
+    if(look&&look.every(available)){c.rotate(Math.atan2(look[1],look[0]));c.beginPath();c.moveTo(10/mapView.zoom,0);c.lineTo(3/mapView.zoom,-3/mapView.zoom);c.lineTo(3/mapView.zoom,3/mapView.zoom);c.fill();}
+    c.restore();c.font=`700 ${11/mapView.zoom}px Rajdhani`;c.fillStyle='#b5d9f5';c.fillText(label,p[0]+7/mapView.zoom,p[1]-7/mapView.zoom);
+  }
   if(mapInfo?.demo){
     const rx=Math.max(20,w*.36),ry=Math.max(20,h*.34),cx=w/2,cy=h/2;
     c.strokeStyle='#303946';c.lineWidth=16;c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);c.stroke();
     c.strokeStyle='#d8dfe8';c.lineWidth=2;c.stroke();
     if(current){const angle=current.lap_progress*Math.PI*2;point=[cx+rx*Math.cos(angle),cy+ry*Math.sin(angle)];forward=[-rx*Math.sin(angle),ry*Math.cos(angle)];}
+    if(current)for(let i=1;i<=3;i++){const a=(current.lap_progress+i*.18)*Math.PI*2;opponent([cx+rx*Math.cos(a),cy+ry*Math.sin(a)],[-rx*Math.sin(a),ry*Math.cos(a)],`P${i+1}`);}
     el('map-message').textContent=current?'Mock mode · live sessions use the installed track map.':'Connection lost · position unavailable';
   }else if(mapInfo?.available&&mapImage){
     const scale=Math.min((w-40)/mapInfo.width,(h-40)/mapInfo.height);
     const fit={x:(w-mapInfo.width*scale)/2,y:(h-mapInfo.height*scale)/2,scale};
     c.drawImage(mapImage,fit.x,fit.y,mapInfo.width*scale,mapInfo.height*scale);
+    for(const other of current?.map_cars||[]){
+      if(Array.isArray(other.position)&&other.position.length===2&&other.position.every(available))opponent(mapPoint(other.position,mapInfo,fit),other.forward,other.race_position>0?`P${other.race_position}`:`#${other.id}`);
+    }
     const position=current?.world_position,look=current?.world_forward;
     if(Array.isArray(position)&&position.length===2&&position.every(available))point=mapPoint(position,mapInfo,fit);
     if(Array.isArray(look)&&look.length===2&&look.every(available))forward=look;
@@ -535,12 +585,54 @@ function drawMap(){
     if(outside)point=null;
     el('map-message').textContent=!current?'Connection lost · position unavailable':outside?'Car position is outside this map. Check the selected track layout.':!point?'Car position unavailable · waiting for telemetry.':!forward?'Direction unavailable · enable AC Dash Bridge.':'';
   }else el('map-message').textContent=mapInfo?.message||(!current?'Waiting for a live driving session…':'Loading track map…');
-  if(!point)return;
+  if(!point){c.restore();return;}
   c.save();c.translate(...point);c.shadowColor='#000';c.shadowBlur=8;
   c.fillStyle='#f4d34c';c.strokeStyle='#080a0d';c.lineWidth=2;c.beginPath();c.arc(0,0,6,0,Math.PI*2);c.fill();c.stroke();
   if(forward&&Math.hypot(...forward)>.001){
     c.rotate(Math.atan2(forward[1],forward[0]));c.fillStyle='#fff';c.beginPath();c.moveTo(18,0);c.lineTo(4,-7);c.lineTo(4,7);c.closePath();c.fill();c.stroke();
-  }c.restore();
+  }c.restore();c.restore();
+}
+// Gestures only move the circuit viewport, and never navigate the page strip.
+const mapPointers=new Map();let mapGesture=null;
+function mapGestureStart(){
+  const p=[...mapPointers.values()];if(!p.length){mapGesture=null;return;}
+  const centre=p.length>1?{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2}:p[0];
+  mapGesture={...mapView,cx:centre.x,cy:centre.y,distance:p.length>1?Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y):0};
+}
+function zoomMap(factor,x,y){
+  const old=mapView.zoom,next=clamp(old*factor,1,8),ratio=next/old;
+  mapView.x=x-(x-mapView.x)*ratio;mapView.y=y-(y-mapView.y)*ratio;mapView.zoom=next;
+}
+const mapCanvas=el('map-canvas');
+mapCanvas.addEventListener('pointerdown',e=>{e.preventDefault();swipeStart=null;mapCanvas.setPointerCapture(e.pointerId);mapPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});mapGestureStart();});
+mapCanvas.addEventListener('pointermove',e=>{
+  if(!mapPointers.has(e.pointerId))return;e.preventDefault();mapPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const p=[...mapPointers.values()],g=mapGesture;if(!g)return;
+  const cx=p.length>1?(p[0].x+p[1].x)/2:p[0].x,cy=p.length>1?(p[0].y+p[1].y)/2:p[0].y;
+  mapView={zoom:g.zoom,x:g.x+cx-g.cx,y:g.y+cy-g.cy};
+  if(p.length>1&&g.distance>0){const box=mapCanvas.getBoundingClientRect();zoomMap(Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y)/g.distance,cx-box.left-box.width/2,cy-box.top-box.height/2);}
+});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])mapCanvas.addEventListener(event,e=>{mapPointers.delete(e.pointerId);mapGestureStart();});
+mapCanvas.addEventListener('wheel',e=>{e.preventDefault();const b=mapCanvas.getBoundingClientRect();zoomMap(Math.exp(-e.deltaY*.002),e.clientX-b.left-b.width/2,e.clientY-b.top-b.height/2);},{passive:false});
+el('map-zoom-in').addEventListener('click',()=>zoomMap(1.4,0,0));el('map-zoom-out').addEventListener('click',()=>zoomMap(1/1.4,0,0));el('map-reset').addEventListener('click',resetMap);
+
+function drawDamage(){
+  const [c,w,h]=canvasFor('damage-canvas');if(w<2||h<2)return;
+  const body=current?.damage_body,hasBody=Array.isArray(body)&&body.length>=4&&body.every(available);
+  const scale=Math.min(w/130,h/200),cx=w/2,cy=h/2;
+  c.save();c.translate(cx,cy);c.scale(scale,scale);
+  const colour=v=>!available(v)?'#3d4652':v<=0?'#68edac':v<20?'#f4d34c':'#ff6975';
+  c.fillStyle='#151e28';c.strokeStyle='#607084';c.lineWidth=2;
+  c.beginPath();c.moveTo(-27,-70);c.lineTo(27,-70);c.lineTo(35,-40);c.lineTo(35,55);c.lineTo(26,73);c.lineTo(-26,73);c.lineTo(-35,55);c.lineTo(-35,-40);c.closePath();c.fill();c.stroke();
+  c.strokeStyle='#607084';c.strokeRect(-22,-28,44,49);
+  for(const [i,x,y,bw,bh] of [[0,-27,-73,54,8],[1,-27,68,54,8],[2,-38,-46,7,100],[3,31,-46,7,100]]){c.fillStyle=colour(hasBody?body[i]:null);c.fillRect(x,y,bw,bh);}
+  for(let i=0;i<4;i++){c.fillStyle=colour(current?.damage_suspension?.[i]);c.fillRect(i%2===0?-47:37,i<2?-48:37,10,23);}
+  c.font='700 12px Rajdhani';c.textAlign='center';
+  const engine=current?.engine_life,gearbox=current?.gearbox_damage;
+  c.fillStyle=available(engine)?colour((1000-engine)/10):'#607084';c.fillText('ENG',0,-7);
+  c.fillStyle=available(gearbox)?colour(gearbox*100):'#607084';c.fillText('GEAR',0,12);
+  c.restore();
+  el('damage-status').textContent=!current?'OFFLINE':!hasBody?'Body data unavailable':body.some(v=>v>0)?'BODY DAMAGE':'NO BODY DAMAGE';
 }
 function radarPoint(car,range,cx,cy,radius){
   return [cx+car.right_m/range*radius,cy-car.forward_m/range*radius];
@@ -585,7 +677,7 @@ function swipePage(direction){
 }
 let swipeStart=null;
 document.addEventListener('pointerdown',e=>{
-  if(e.pointerType!=='touch'||e.clientX<24||e.clientX>innerWidth-24||e.target.closest('button,input,select,dialog'))return;
+  if(e.pointerType!=='touch'||e.clientX<24||e.clientX>innerWidth-24||e.target.closest('button,input,select,dialog,#map-canvas'))return;
   swipeStart={x:e.clientX,y:e.clientY};
 },{passive:true});
 document.addEventListener('pointerup',e=>{

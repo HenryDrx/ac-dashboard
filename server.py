@@ -41,7 +41,7 @@ def mock_sample():
             "g_longitudinal": round(math.cos(t / 3) * .8, 2),
             "tyre_temps": [round(79 + i * 4 + math.sin(t / 6 + i) * 8, 1) for i in range(4)],
             "tc": 1, "abs": 1, "drs": None, "drs_available": None, "kers": None,
-            "session": 0, "position": None, "lap_progress": progress,
+            "session": 2, "is_race":True,"position":3, "lap_progress": progress,
             "lap": 3, "lap_ms": int(progress * 92000), "last_lap_ms": 93520,
             "best_lap_ms": 92000, "delta": round(math.sin(t / 7) * .45, 3),
             "delta_reference_ms": 92000, "flag": 0, "in_pit": False,
@@ -61,6 +61,7 @@ def create_app(mock=False, ac_root=None):
     token = secrets.token_urlsafe(32)
     command_lock = asyncio.Lock()
     assets = TrackAssets(ac_root)
+    mock_scenario=dict(in_pit=False,in_pit_lane=False,lap_valid=True,current_lap_invalid=False,track_limits=False)
     mock_controls = [
         dict(id='tc',label='Traction control',type='step',value=2,min=0,max=2,step=1,unit='',group='assists'),
         dict(id='abs',label='ABS',type='step',value=1,min=0,max=3,step=1,unit='',group='assists'),
@@ -69,12 +70,17 @@ def create_app(mock=False, ac_root=None):
         dict(id='drs',label='DRS',type='toggle',value=False,group='power'),
         dict(id='kers',label='KERS / ERS deploy',type='hold',value=False,group='power'),
         dict(id='setup:PRESSURE_LF',label='Front left pressure',type='step',value=26,min=15,max=40,step=.5,unit='psi',group='setup'),
+        dict(id='demo-pits',label='Demo: enter / exit pits',type='action',value=False,group='session'),
+        dict(id='demo-cut',label='Demo: track limits',type='action',value=False,group='session'),
+        dict(id='demo-reset',label='Demo: clean lap',type='action',value=False,group='session'),
+        dict(id='pit-preset',label='Quick-pit preset',type='select',value='Preset 1',options=['Preset 1','Preset 2','Preset 3'],group='pitplan'),
+        dict(id='pit:FUEL',label='Fuel to add',type='step',value=20,min=0,max=100,step=1,unit='L',group='pitplan'),
     ]
 
     def control_state():
         if mock:
             return dict(csp_connected=True,car='ks_porsche_911_gt3_rs',controls=mock_controls,
-                        setup_editable=True,mock=True,in_pit=False)
+                        setup_editable=True,mock=True,in_pit=mock_scenario['in_pit'])
         state = reader.bridge.sample_v2()
         return state if isinstance(state,dict) else {}
 
@@ -125,6 +131,10 @@ def create_app(mock=False, ac_root=None):
                     if value is not True:raise ValueError('Invalid action request.')
                 else:raise ValueError('Unsupported control type.')
                 if mock:
+                    if control_id=='demo-pits':
+                        mock_scenario['in_pit']=not mock_scenario['in_pit'];mock_scenario['in_pit_lane']=mock_scenario['in_pit']
+                    elif control_id=='demo-cut':mock_scenario.update(lap_valid=False,current_lap_invalid=True,track_limits=True)
+                    elif control_id=='demo-reset':mock_scenario.update(lap_valid=True,current_lap_invalid=False,track_limits=False)
                     if kind!='action':spec['value']=value
                     return web.json_response(dict(ok=True,message='Simulated change applied — mock mode.',state=control_state()))
                 command_id = reader.bridge.send_command(state,control_id,value)
@@ -178,6 +188,9 @@ def create_app(mock=False, ac_root=None):
             latest = mock_sample() if mock else reader.sample()
             latest['controller'] = control_state()
             if mock:
+                latest.update(mock_scenario)
+                if mock_scenario['current_lap_invalid']:latest['delta']=None
+                latest.update(damage_body=[0,12,0,28],damage_suspension=[0,0,0,0],engine_life=960,gearbox_damage=.05,delta_source='mock reference')
                 latest['tc_mode']=mock_controls[0]['value']
                 latest['abs_mode']=mock_controls[1]['value']
             state = latest["message"]

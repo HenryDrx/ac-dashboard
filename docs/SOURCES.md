@@ -18,3 +18,5 @@ Race ranking prefers CSP's current computed racePosition over the original share
 Radar uses relative vehicle positions and facing vectors. Its distances are position-to-position measurements rather than bumper clearance. Its distance/height thresholds are prototype display policies rather than official collision-detection logic.
 
 Lua startup/control/radar tests use a synthetic SDK environment. Live session rules and car support can still restrict actions. Interface documentation and mock tests do not prove every car, device or online-session combination.
+
+V7 also checks pit flags, lap validity/reset counter, session performanceMeter and damage units in the installed CSP Lua-app SDK. See EXPLORATION-V7.md for documented camera/texture possibilities and limits.

@@ -43,6 +43,23 @@ class CommandHTTPTests(unittest.IsolatedAsyncioTestCase):
         response=await self.send('ffb',75)
         self.assertTrue((await response.json())['ok'])
 
+    async def test_mock_pit_and_cut_reach_websocket(self):
+        ws=await self.client.ws_connect('/ws')
+        try:
+            await self.send('demo-pits',True)
+            for _ in range(10):
+                sample=await ws.receive_json(timeout=1)
+                if sample.get('in_pit'):break
+            self.assertTrue(sample['in_pit_lane'])
+            await self.send('demo-pits',True)
+            await self.send('demo-cut',True)
+            for _ in range(10):
+                sample=await ws.receive_json(timeout=1)
+                if sample.get('track_limits'):break
+            self.assertFalse(sample['in_pit'])
+            self.assertTrue(sample['current_lap_invalid'])
+        finally:await ws.close()
+
     async def test_reject_invalid_and_changed_car(self):
         for control,value in [('tc',99),('tc',True),('headlights','yes'),('not-a-command',1)]:
             self.assertEqual((await self.send(control,value)).status,400)

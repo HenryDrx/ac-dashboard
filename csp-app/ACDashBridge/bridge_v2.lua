@@ -16,6 +16,7 @@ local capabilities = {}
 local cachedControls, cachedEdit, cachedCar, nextControlsAt = nil, false, nil, 0
 local thermalKey, thermalCurves = nil, {}
 local radarState, radarAt = nil, -1
+local mapCars, mapAt = {}, -1
 local function num(v, fallback)
   if type(v) == 'number' and v == v and math.abs(v) < 100000000 then return v end
   return fallback or 0
@@ -207,6 +208,25 @@ function script.update(dt)
     payload.tc_mode=car.tractionControlMode;payload.abs_mode=car.absMode
     payload.tc_modes=car.tractionControlModes;payload.abs_modes=car.absModes
     payload.lap_valid=car.isLapValid;payload.last_lap_valid=car.isLastLapValid
+    payload.native_delta=car.performanceMeter;payload.native_best_ms=car.bestLapTimeMs
+    payload.delta_speed_ms=car.performanceMeterSpeedDifferenceMs
+    payload.damage_body={};payload.damage_suspension={}
+    for i=0,3 do
+      if car.damage then payload.damage_body[i+1]=num(car.damage[i]) end
+      payload.damage_suspension[i+1]=num(car.wheels[i].suspensionDamage)
+    end
+    payload.engine_life=car.engineLifeLeft;payload.gearbox_damage=car.gearboxDamage
+    if now-mapAt>=.1 then
+      mapCars={}
+      for i=1,num(sim.carsCount,1)-1 do
+        local other=ac.getCar(i)
+        if other and other.isConnected and other.isActive then
+          mapCars[#mapCars+1]={id=i,position={other.position.x,other.position.z},forward={other.look.x,other.look.z},race_position=other.racePosition}
+        end
+      end
+      mapAt=now
+    end
+    payload.map_cars=mapCars;payload.is_online=sim.isOnlineRace
     payload.reset_counter=car.resetCounter
     payload.thermal_curves=curvesFor(car)
     payload.in_pit=car.isInPit;payload.in_pit_lane=car.isInPitlane;payload.paused=sim.isPaused

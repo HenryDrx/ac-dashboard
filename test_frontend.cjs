@@ -39,12 +39,39 @@ console.log('Passed: radar puts right-hand cars right and cars ahead above the p
 
 const raceBlock=source.slice(source.indexOf('  const racePosition ='),source.indexOf("  el('progress-fill').style.width",source.indexOf('  const racePosition =')));
 function raceReadout(data){
- const nodes={};let isRace=false;
- const sandbox={data,available:x=>typeof x==='number'&&Number.isFinite(x),el:id=>nodes[id]||(nodes[id]={}),document:{querySelector:()=>({classList:{toggle:(name,value)=>isRace=value}})}};
- vm.runInNewContext(raceBlock,sandbox);return {text:nodes['session-value'].textContent,isRace};
+ const nodes={};
+ const sandbox={data,available:x=>typeof x==='number'&&Number.isFinite(x),el:id=>nodes[id]||(nodes[id]={})};
+ vm.runInNewContext(raceBlock,sandbox);return nodes;
 }
-assert.equal(raceReadout({session:2,is_race:true,position:12}).text,'P12');
-assert.equal(raceReadout({session:2,is_race:true,position:3}).text,'P3');
-assert.equal(raceReadout({session:2,is_race:true,position:null}).text,'—');
-assert.equal(raceReadout({session:2,is_race:false,position:3,lap_progress:.2}).text,'20%');
-console.log('Passed: live race-position readout updates and missing ranks do not stick.');
+let race=raceReadout({session:2,is_race:true,position:12,lap_progress:.25});
+assert.equal(race['race-position'].textContent,'P12');assert.equal(race['session-value'].textContent,'25%');assert.equal(race['race-line'].hidden,false);
+assert.equal(raceReadout({is_race:true,position:3})['race-position'].textContent,'P3');
+assert.equal(raceReadout({is_race:true,position:null})['race-position'].textContent,'—');
+assert.equal(raceReadout({is_race:false,lap_progress:.2})['race-line'].hidden,true);
+console.log('Passed: live race position and lap progress coexist.');
+const events=source.slice(source.indexOf('let previousPit='),source.indexOf('const niceName'));
+const eventNodes={},pages=[],alerts=[];
+const eventContext={navigationBusy:false,performance:{now:()=>100},controlContext:'driving',controlTab:'assists',activePage:'dashboard',el:id=>eventNodes[id]||(eventNodes[id]={classList:{toggle(){},remove(){},add(){}},querySelector(){return {textContent:''}}}),showPage:p=>{pages.push(p);eventContext.activePage=p;}};
+vm.runInNewContext(events,eventContext);
+vm.runInNewContext('sessionAlert=message=>{}',eventContext);
+eventContext.updateSessionEvents({car:'a',track:'t',lap:1,in_pit:false},false);
+eventContext.updateSessionEvents({car:'a',track:'t',lap:1,in_pit_lane:true},false);assert.equal(pages.at(-1),'controls');
+eventContext.updateSessionEvents({car:'a',track:'t',lap:1,in_pit_lane:true},false);assert.equal(pages.length,1);
+eventContext.updateSessionEvents({car:'a',track:'t',lap:1,in_pit:false},false);assert.equal(pages.at(-1),'dashboard');
+console.log('Passed: pit-lane entry auto-opens controls once and exit returns to dashboard.');
+
+// Exercise the actual pan/pinch handlers with synthetic pointer inputs.
+const mapHandlers={},buttonHandlers={};
+const mapNode={addEventListener:(n,fn)=>mapHandlers[n]=fn,setPointerCapture(){},getBoundingClientRect:()=>({left:0,top:0,width:800,height:400})};
+const zoomContext={Map,Math,swipeStart:null,mapView:{zoom:1,x:0,y:0},clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),resetMap(){},el:id=>id==='map-canvas'?mapNode:{addEventListener:(n,fn)=>buttonHandlers[id]=fn}};
+const mapHandlersBlock=source.slice(source.indexOf('const mapPointers='),source.indexOf('function drawDamage('));
+vm.runInNewContext(mapHandlersBlock,zoomContext);
+const pointer=(id,x,y)=>({pointerId:id,clientX:x,clientY:y,preventDefault(){}});
+mapHandlers.pointerdown(pointer(1,300,200));mapHandlers.pointermove(pointer(1,340,210));
+assert.equal(zoomContext.mapView.x,40);assert.equal(zoomContext.mapView.y,10);
+mapHandlers.pointerup(pointer(1,340,210));zoomContext.mapView={zoom:1,x:0,y:0};
+mapHandlers.pointerdown(pointer(1,300,200));mapHandlers.pointerdown(pointer(2,500,200));
+mapHandlers.pointermove(pointer(2,700,200));assert.equal(zoomContext.mapView.zoom,2);
+mapHandlers.pointercancel(pointer(1,300,200));mapHandlers.pointercancel(pointer(2,700,200));
+buttonHandlers['map-zoom-in']();assert.equal(zoomContext.mapView.zoom,2.8);
+console.log('Passed: one-finger map pan, two-finger pinch, pointer cancellation and zoom buttons.');

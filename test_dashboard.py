@@ -78,6 +78,14 @@ class LayoutTests(unittest.TestCase):
                         {'csp_connected':True,'race_position':2,'is_race':True},
                         {'csp_connected':True,'race_position':0,'is_race':True}]):
                         self.assertEqual([reader.sample()['position'] for _ in range(4)],[12,3,2,None])
+                    with patch.object(reader.bridge,'sample',return_value={
+                        'csp_connected':True,'race_position':3,'lap_valid':True,
+                        'native_best_ms':90000,'native_delta':-.456,
+                        'in_pit':False,'in_pit_lane':True}):
+                        fresh=reader.sample()
+                        self.assertEqual(fresh['delta'],-.456)
+                        self.assertEqual(fresh['delta_source'],'AC session best')
+                        self.assertTrue(fresh['in_pit'],'Pit lane must not be overwritten by pit-box false')
 
                     self.assertIsNone(sample['drs'])
                     gm[:12] = struct.pack('<iii', 2, 3, 0)

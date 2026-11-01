@@ -11,3 +11,4 @@ lap-recordings/
 *.zip
 current-control-inventory.json
 .DS_Store
+bridge-backups/
