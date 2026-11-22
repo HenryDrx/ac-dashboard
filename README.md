@@ -2,11 +2,13 @@
 
 A phone dashboard and control-panel prototype for **original Assetto Corsa**. A small Python server on the gaming PC streams telemetry to a browser on the same Wi-Fi, including iPhone Safari. No native phone app, Node server or cloud service is needed.
 
-![Landscape dashboard](docs/images/dashboard.png)
+![Track / Focus cockpit in mock mode](docs/images/cockpit-track.jpg)
 
-**Status:** experimental prototype, version 0.7.0. A runnable mock mode lets reviewers explore the interface without Assetto Corsa or CSP. Screenshots show simulated data.
+**Status:** latest web prototype with AC Dash Bridge 2.7. Mock mode lets reviewers explore the interface without Assetto Corsa or CSP. Screenshots show simulated data.
 
 ## What it does
+
+- Five-dial **Cockpit** view with Classic, Sport, and Track / Focus modes. Use on-screen controls, press `M`, or bind a wheel control through the bridge. [Cockpit setup](docs/COCKPIT-DESIGN.md).
 
 - Live speed, RPM/shift indicator, gear and valid neighbouring gears, pedals, steering, G-force and tyre readings.
 - Larger current-lap and delta timing, recorded lap history, a distance-matched reference and documented AC session-delta fallback. Red/green magnitude bar (±2 seconds).
@@ -51,7 +53,7 @@ Navigation forms a horizontal strip: **map/radar — dashboard — controls**.
 
 ## Connect to live Assetto Corsa
 
-Live telemetry requires Windows, original AC and a driving session. The bundled **AC Dash Bridge 2.4** enables the extra telemetry and controls. Installing AC + CSP alone does not install our bridge. Basic telemetry works without it; full functionality needs this one-time bridge installation and a session restart.
+Live telemetry requires Windows, original AC and a driving session. The bundled **AC Dash Bridge 2.7** enables the extra telemetry and controls. Basic telemetry works without it. For the extra features, install the bridge once and restart the session.
 
 1. Run `py install_bridge.py` once, or copy `csp-app/ACDashBridge` into `<Assetto Corsa>/apps/lua/`. If automatic detection fails: `py install_bridge.py --ac-root "<your AC installation folder>"`. The installer backs up our previous bridge before replacing its three files.
 2. Start a fresh driving session. Open **AC Dash Bridge** in the in-game Lua-app list if needed.
@@ -107,7 +109,7 @@ Each browser has a bounded latest-only queue to avoid building a backlog of old 
 
 ## Verification and current limits
 
-- 20 Python checks cover shared-memory fixtures, recording/delta persistence, map paths/configuration, control validation and latest-only queues.
+- Python tests cover shared-memory fixtures, recording and delta persistence, map paths, control validation and latest-only queues.
 - JavaScript checks cover navigation, gear neighbours, coordinate projection and ranking display updates.
 - A synthetic Lua test covers startup ordering, command/readback, radar filtering and a race-position change from P12 to P3.
 - Live telemetry and supported controls have been exercised during development. Automated fixtures are not a substitute for every car/session/device combination.
@@ -126,8 +128,6 @@ npm test
 ```
 
 Tyre colours use sourced palette/thermal information but are not an exact reproduction of Kunos' internal thresholds. Radar is a simplified position-based view, not predictive collision detection. Pit/setup changes remain subject to AC restrictions. Fresh live validation of the latest ranking change is still useful; the fixed P12→P3 regression is covered with fixtures.
-
-The layout is currently fixed. Configurable widgets, setup-file management and broader controls are future work.
 
 ## References and assets
 
@@ -148,3 +148,13 @@ Interface references and implementation boundaries are documented in [SOURCES](d
 In **mock mode**, open Controls → Session and use **Demo: enter / exit pits**, **Demo: track limits**, and **Demo: clean lap**. These change simulated data only. Test pit entry, navigate back to Session to exit, and check that the dashboard returns. Live session validation still needs driving tests.
 
 See [future camera and cockpit-dashboard research](docs/EXPLORATION-V7.md). Camera dragging and automatic cockpit-theme extraction are researched, not implemented.
+
+## Custom dashboard layouts
+
+Open **Layout** from the dashboard. Start with Classic, Race, Analysis or Track. Drag an available instrument onto the grid, or tap it to add it. Use a tile's grip to reorder it, or use the arrow buttons. The × button returns a tile to the library.
+
+Save applies the layout in the current browser. Cancel restores the last saved layout. Select Classic and save to return to the original V7 dashboard. The grid reflows for portrait and landscape and uses one saved arrangement per browser and dashboard address. The live bridge setup is the same as V7.
+
+## Direct Connect experiment
+
+`tools/direct_connect_probe.py` reads a sample from original Assetto Corsa's built-in UDP telemetry feed. It is a development probe for a future iPhone app. The current phone dashboard uses the Windows server described above.

@@ -90,6 +90,7 @@ function setAid(id, value, mode='setting') {
   else {b.textContent = value > 0 ? 'ON' : 'OFF'; if (value > 0) node.classList.add('enabled');}
 }
 function clear(message) {
+  document.dispatchEvent(new CustomEvent('acdash-wheel-mode', {detail: {}}));
   if (offlineMessage === message && !current) return;
   offlineMessage = message;
   current = null; history = []; gTrail = [];
@@ -131,6 +132,7 @@ function render(data) {
   const changedCar = current && (current.car !== data.car || current.track !== data.track || current.session !== data.session || current.status !== data.status);
   if (changedCar) {history=[]; gTrail=[];}
   current = data; offlineMessage = '';
+  document.dispatchEvent(new CustomEvent('acdash-wheel-mode', {detail: data}));
   loadPrefs(data.car);
   el('badge').textContent = data.status.toUpperCase(); el('badge').className = data.status;
   el('status').textContent = data.status === 'mock' ? 'SIMULATED SESSION' : data.csp_connected ? 'TELEMETRY + BRIDGE CONNECTED' : 'BASIC TELEMETRY · BRIDGE OFFLINE';
@@ -265,7 +267,7 @@ function drawHistory(now) {
 }
 function frame(now) {
   if(now>alertUntil)el('session-alert').hidden=true;
-  if(now-lastFrame>25){if(activePage==='dashboard'){drawG(now);drawHistory(now);}else if(activePage==='map'){drawMap();drawRadar();drawDamage();}lastFrame=now;}
+  if(now-lastFrame>25){if(activePage==='dashboard'){drawG(now);drawHistory(now);window.dashboardLayout?.drawCircuit();}else if(activePage==='map'){drawMap();drawRadar();drawDamage();}lastFrame=now;}
   requestAnimationFrame(frame);
 }
 function connect() {
@@ -403,6 +405,9 @@ function showPage(page){
   if(navigationBusy||page===activePage)return;
   const previous=activePage,from=pageNode(previous),to=pageNode(page);
   activePage=page;to.hidden=false;
+  const cockpit = el('mission');
+  if (page === 'controls' && cockpit?.open) cockpit.close();
+  window.dashboardLayout?.showPage(page);
   if(page==='controls'){refreshController().then(()=>{if(activePage==='controls')renderControls();});renderControls();}
   else if(page==='map'){ensureMap();drawMap();drawRadar();}
   else{drawG(performance.now());drawHistory(performance.now());}
@@ -671,6 +676,7 @@ function drawRadar(){
 el('map-open').addEventListener('click',()=>showPage('map'));
 el('map-dashboard').addEventListener('click',()=>showPage('dashboard'));
 function swipePage(direction){
+  if(window.dashboardLayout?.editing())return;
   const pages=['map','dashboard','controls'];
   const index=pages.indexOf(activePage)+(direction==='left'?1:-1);
   if(index>=0&&index<pages.length)showPage(pages[index]);

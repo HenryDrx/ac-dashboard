@@ -2,7 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'web/app.js'),'utf8');
 const gesture=source.slice(source.indexOf('function swipePage(direction)'),source.indexOf('setInterval(updateControlContext,500);'));
-const listeners={};const context={innerWidth:844,activePage:'dashboard',document:{addEventListener(name,fn){listeners[name]=fn;}},showPage(name){context.activePage=name;}};
+const listeners={};const context={window:{},innerWidth:844,activePage:'dashboard',document:{addEventListener(name,fn){listeners[name]=fn;}},showPage(name){context.activePage=name;}};
 vm.runInNewContext(gesture,context);
 const event=(x,y,interactive=false)=>({pointerType:'touch',clientX:x,clientY:y,target:{closest(){return interactive;}}});
 const swipe=(x1,y1,x2,y2,interactive=false)=>{listeners.pointerdown(event(x1,y1,interactive));listeners.pointerup(event(x2,y2,interactive));};

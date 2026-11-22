@@ -2,10 +2,10 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="AC Dash">
-<title>AC Dash</title><link rel="stylesheet" href="/style.css?v=7.0"><link rel="manifest" href="/manifest.webmanifest">
-</head><body>
+<title>AC Dash</title><link rel="stylesheet" href="/style.css?v=8.0"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/layout.css?v=8.0"><link rel="stylesheet" href="/cockpit.css?v=16"></head><body>
 <main id="dashboard">
-<header class="topbar"><span class="wordmark">AC<span>/</span>DASH <small>07.0</small></span><div class="connection"><span id="badge">OFFLINE</span><span id="status" role="status" aria-live="polite">Connecting to server…</span></div><div class="header-actions"><button id="map-open" type="button">Map</button><button id="controls-open" type="button">Controls</button><button id="settings-open" type="button">Settings</button></div></header>
+<header class="topbar"><span class="wordmark">AC<span>/</span>DASH <small>08.0</small></span><div class="connection"><span id="badge">OFFLINE</span><span id="status" role="status" aria-live="polite">Connecting to server…</span></div><div class="header-actions"><button id="map-open" type="button">Map</button><button id="controls-open" type="button">Controls</button><button id="mission-open" type="button">Cockpit</button><button id="layout-open" type="button">Layout</button><button id="settings-open" type="button">Settings</button></div></header>
 <section class="cockpit" aria-label="Live driving instruments">
 <aside class="support">
 
@@ -18,7 +18,25 @@
 <section class="rpm-strip" id="rpm-strip" aria-label="Engine RPM and shift indicator"><div id="rpm-fill"></div><div class="rpm-ticks" aria-hidden="true"></div><div class="rpm-content"><span class="rpm-scale-label">RPM × 1000</span><strong class="rpm-reading"><span id="rpm">—</span><small> / <b id="max-rpm">—</b></small></strong><div><strong id="shift-label">RPM</strong><span id="rpm-percent">—%</span></div></div></section>
 <section class="steering steering-wide" aria-label="Steering wheel angle"><span id="steering-angle" class="sr-only">Steering unavailable</span><div class="steering-track"><i id="steering-marker" hidden></i></div></section>
 <section class="history"><div class="history-head"><span>INPUT TRACE <small id="history-length">10 SEC</small></span><div class="legend"><span class="throttle">THROTTLE <b id="throttle">—</b></span><span class="brake">BRAKE <b id="brake">—</b></span><span class="gear-trace">GEAR / 8</span></div></div><div class="input-body"><canvas id="history-canvas" aria-label="Rolling throttle, brake and stepped gear history"></canvas><div class="pedal-pair"><div class="pedal throttle-pedal" aria-label="Throttle"><i id="throttle-fill"></i><b id="throttle-pct">—</b><small>THR</small></div><div class="pedal brake-pedal" aria-label="Brake"><i id="brake-fill"></i><b id="brake-pct">—</b><small>BRK</small></div></div></div></section>
-<footer><span id="footer-state">LOCAL TELEMETRY · ORIGINAL ASSETTO CORSA</span><span class="portrait-hint">Best viewed in landscape</span><span>AC DASH / 07.0</span></footer>
+<section id="layout-editor" aria-label="Edit dashboard layout" hidden>
+  <div class="layout-heading">
+    <div><span class="eyebrow">DASHBOARD WORKSPACE</span><h2>Arrange your instruments</h2></div>
+    <div class="layout-actions"><button id="layout-cancel" type="button">Cancel</button><button id="layout-save" type="button">Save layout</button></div>
+  </div>
+  <label for="layout-preset">Starting layout</label>
+  <select id="layout-preset">
+    <option value="" disabled>Custom arrangement</option>
+    <option value="classic">Classic · V7</option>
+    <option value="race">Race · essentials</option>
+    <option value="analysis">Analysis · traces and tyres</option>
+    <option value="track">Track · map and radar</option>
+  </select>
+  <p>Drag a library item onto the grid or tap it to add. Drag a tile by its grip, or use its move buttons.</p>
+  <div id="layout-library" aria-label="Available instruments"></div>
+  <p id="layout-feedback" role="status"></p>
+</section>
+<section id="widget-grid" aria-label="Dashboard instruments" hidden></section>
+<footer><span id="footer-state">LOCAL TELEMETRY · ORIGINAL ASSETTO CORSA</span><span class="portrait-hint">Best viewed in landscape</span><span>AC DASH / 08.0</span></footer>
 </main>
 <section id="map-page" class="map-page" hidden aria-label="Track map"><header class="map-header"><button id="map-dashboard" type="button">Dashboard →</button><div><span class="eyebrow">CIRCUIT VIEW</span><h2 id="map-title">Track map</h2></div><span id="map-live">OFFLINE</span></header><div class="map-body"><section class="radar-panel" aria-label="Nearby cars radar"><header><span>PROXIMITY</span><b id="radar-count">—</b></header><div class="radar-stage"><canvas id="radar-canvas" aria-label="Cars relative to your car; ahead is up"></canvas></div><p id="radar-status" role="status">Waiting for telemetry…</p></section><div class="map-stage"><div class="map-tools"><button id="map-zoom-out" aria-label="Zoom out">−</button><button id="map-reset">Fit</button><button id="map-zoom-in" aria-label="Zoom in">+</button></div><canvas id="map-canvas" aria-label="Track outline and your car direction"></canvas><p id="map-message" role="status">Waiting for track data…</p></div><section class="damage-panel"><span class="eyebrow">CAR CONDITION</span><canvas id="damage-canvas" aria-label="Body, suspension and powertrain condition"></canvas><span id="damage-status">Waiting for telemetry</span></section></div><footer><span id="map-caption">Swipe left to return</span><span id="map-speed">— KM/H</span></footer></section>
 <section id="controls-page" class="controls-page" hidden aria-label="Car controls">
@@ -30,5 +48,24 @@
 <footer class="controls-footer"><span id="control-feedback" role="status" aria-live="polite">Swipe right to return to the dashboard.</span><button id="control-reset" type="button">Reset preview</button></footer>
 </section>
 <div id="session-alert" class="session-alert" role="status" aria-live="polite" hidden><strong></strong></div><dialog id="settings"><form id="settings-form"><div class="dialog-title"><div><span class="eyebrow">DISPLAY SETUP</span><h2>Make it your dash.</h2></div><button type="button" id="settings-close">Close</button></div><p>Saved in this browser for the current car. Adjust while parked.</p><label>RPM limit override <input id="max-rpm-setting" type="number" min="1000" max="30000" step="100" placeholder="Use car data"></label><label>Shift reminder at % of limit <input id="shift-setting" type="number" min="50" max="100" step="1" required></label><label>Tyre target minimum °C <input id="tyre-low-setting" type="number" min="20" max="180" required></label><label>Tyre target maximum °C <input id="tyre-high-setting" type="number" min="21" max="200" required></label><label>History window <select id="history-setting"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="20">20 seconds</option></select></label><p class="settings-note">Tyre colours use compound thermal data when available; fallback targets apply otherwise. Colour sensitivity is our approximation of the original app. TC / ABS show settings, not intervention. Delta uses a recorded complete valid lap and keeps its reference across restarts.</p><p id="settings-error" role="alert"></p><button id="lap-log-open" type="button">Recorded laps</button><button class="save" type="submit">Save settings</button></form></dialog>
-<dialog id="lap-log"><h2>Recorded laps</h2><p id="lap-log-state"></p><div id="lap-log-list"></div><button id="lap-log-close" type="button">Close</button></dialog><script src="/app.js?v=7.0"></script></body></html>
+<dialog id="lap-log"><h2>Recorded laps</h2><p id="lap-log-state"></p><div id="lap-log-list"></div><button id="lap-log-close" type="button">Close</button></dialog><script src="/app.js?v=8.1"></script><script src="/layout.js?v=8.0"></script><dialog id="mission" aria-label="Cockpit" data-mode="classic">
+  <header class="mission-top">
+    <button id="mission-close" type="button">← Dashboard</button>
+    <span id="mission-status">OFFLINE</span>
+    <button id="mission-mode-toggle" type="button" aria-controls="mission-modes" aria-expanded="true">Hide modes</button>
+  </header>
+  <div class="mission-cluster">
+    <canvas width="400" height="400" aria-label="Left dial face or traction control"></canvas>
+    <canvas width="400" height="400" aria-label="Speedometer"></canvas>
+    <canvas width="400" height="400" aria-label="RPM, gear, throttle and brake"></canvas>
+    <canvas width="400" height="400" aria-label="Lap time and delta from previous lap"></canvas>
+    <canvas width="400" height="400" aria-label="Local circuit map or ABS"></canvas>
+    <div id="mission-tyres" role="group" aria-label="Tyre temperature and wear"></div>
+  </div>
+  <nav id="mission-modes" class="mission-modes" aria-label="Cockpit layout">
+    <button type="button" data-mode="classic" aria-pressed="true">Classic</button>
+    <button type="button" data-mode="sport" aria-pressed="false">Sport</button>
+    <button type="button" data-mode="track" aria-pressed="false">Track / Focus</button>
+  </nav>
+</dialog><script src="/cockpit.js?v=18"></script></body></html>
 

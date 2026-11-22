@@ -1,0 +1,95 @@
+@font-face {
+  font-family: Cockpit;
+  src: url('/fonts/Oxanium-Variable.ttf') format('truetype');
+  font-weight: 200 800;
+  font-display: swap;
+}
+#mission {
+  --instrument-red: #ed514b;
+  --instrument-white: #e8e9ed;
+  --mode-motion: 780ms cubic-bezier(.22, .72, .18, 1);
+  box-sizing: border-box;
+  width: 100%; max-width: 100%; height: 100%; max-height: 100%;
+  margin: auto;
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  border: 0; border-radius: 0;
+  background: var(--bg, #0b0d10);
+  color: var(--instrument-white);
+  overflow: hidden;
+  font-family: Cockpit, Rajdhani, sans-serif;
+}
+#mission[open] { display: grid; grid-template-rows: 32px minmax(0, 1fr) 40px; }
+body:has(#mission[open]) { overflow: hidden; }
+.mission-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 5; }
+#mission button {
+  font-family: inherit; font-size: 11px; font-weight: 500; letter-spacing: .035em;
+  color: #959aa3; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; padding: 8px 12px; min-height: 32px;
+  transition: color .2s, border-color .2s, background .2s;
+}
+#mission button:hover { color: #f2f3f6; background: #ffffff08; }
+#mission button:focus-visible { outline: 2px solid #b9bec7; outline-offset: 3px; }
+#mission-status { margin-left: auto; font-size: 9px; font-weight: 500; letter-spacing: .2em; color: #8d939c; }
+#mission-status[data-state="offline"] { color: #ec756d; }
+.mission-cluster {
+  --outer-left: 10%; --outer-right: 90%; --outer-size: 19%;
+  --inner-left: 27%; --inner-right: 73%; --inner-size: 28%; --rpm-size: 36%;
+  position: relative; align-self: center; justify-self: center;
+  width: min(100%, 228svh); aspect-ratio: 2.5; isolation: isolate;
+}
+.mission-cluster canvas {
+  position: absolute; left: var(--left); top: 56%; width: var(--size);
+  height: auto; aspect-ratio: 1; transform: translate(-50%, -50%);
+  transition: left var(--mode-motion), width var(--mode-motion), top var(--mode-motion);
+}
+.mission-cluster canvas:nth-child(1) { --left: var(--outer-left); --size: var(--outer-size); z-index: 1; }
+.mission-cluster canvas:nth-child(2) { --left: var(--inner-left); --size: var(--inner-size); top: 54%; z-index: 2; }
+.mission-cluster canvas:nth-child(3) { --left: 50%; --size: var(--rpm-size); top: 48%; z-index: 3; }
+.mission-cluster canvas:nth-child(4) { --left: var(--inner-right); --size: var(--inner-size); top: 54%; z-index: 2; }
+.mission-cluster canvas:nth-child(5) { --left: var(--outer-right); --size: var(--outer-size); z-index: 1; }
+#mission[data-mode="sport"] .mission-cluster { --outer-left: 14%; --outer-right: 86%; }
+#mission[data-mode="track"] .mission-cluster {
+  --outer-left: 14%; --outer-right: 86%;
+  --inner-left: 25.5%; --inner-right: 74.5%; --rpm-size: 39%;
+}
+#mission[data-mode="track"] canvas:nth-child(3) { top: 47%; }
+.mission-modes { display: flex; align-items: center; justify-content: center; gap: 10px; z-index: 5; }
+#mission .mission-modes button { min-width: 90px; height: 36px; border-radius: 0; border-bottom: 2px solid #2a2d32; }
+#mission .mission-modes button[aria-pressed="true"] { color: #f3f2f3; border-bottom-color: var(--instrument-red); background: #ed514b0a; }
+#mission.modes-hidden { grid-template-rows: 32px minmax(0, 1fr); }
+#mission.modes-hidden .mission-cluster { width: min(100%, 242svh); }
+#mission-tyres {
+  position: absolute; top: 56%; left: var(--outer-left); width: 10.5%;
+  transform: translate(-50%, -50%); z-index: 1; container-type: inline-size;
+  transition: left var(--mode-motion), opacity .25s ease; pointer-events: none;
+}
+#mission:not([data-mode="classic"]) #mission-tyres { opacity: 0; }
+#mission[data-mode="classic"] #mission-tyres { transition: left var(--mode-motion), opacity .45s ease .2s; }
+#mission-tyres .tyres { grid-template-columns: repeat(2, 26cqw); justify-content: center; gap: 5cqw 8cqw; }
+#mission-tyres .tyre {
+  width: 26cqw; height: 55cqw; min-height: 0; padding: 0;
+  border-radius: 4cqw; border-color: #59616d !important; background: #080b10;
+}
+/* Preserve thermal zones and wear; only the cockpit palette is quieter. */
+#mission-tyres .tyre-fill { filter: saturate(.27) brightness(.87); opacity: .75; }
+#mission-tyres .tyre.flatspot { outline-color: #df7066; }
+#mission-tyres .tyre.locking { animation: cockpit-lock .4s steps(2, end) infinite; }
+@keyframes cockpit-lock { 50% { box-shadow: inset 0 0 0 2px #ed514b; } }
+@media (orientation: landscape) and (max-height: 480px) {
+  #mission { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: max(6px, env(safe-area-inset-bottom)); grid-template-rows: 26px minmax(0, 1fr) 28px; }
+  #mission button { min-height: 26px; padding: 5px 10px; font-size: 10px; }
+  #mission .mission-modes button { height: 27px; }
+  #mission.modes-hidden { grid-template-rows: 26px minmax(0, 1fr); }
+  .mission-cluster { width: min(100%, 220svh); }
+}
+@media (orientation: portrait) {
+  #mission { padding-inline: 6px; }
+  .mission-cluster { width: 100%; }
+  .mission-top { gap: 2px; }
+  #mission .mission-modes button { min-width: 70px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mission { --mode-motion: 0ms; }
+  #mission-tyres, #mission[data-mode="classic"] #mission-tyres, #mission button { transition: none; }
+  #mission-tyres .tyre.locking { animation: none; outline: 2px solid #ed514b; }
+}

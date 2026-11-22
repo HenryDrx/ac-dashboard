@@ -212,8 +212,14 @@ class ACReader:
             # CSP documents performanceMeter in seconds against AC's session best.
             # Useful when this app joined mid-lap and has no sampled reference yet.
             native=extra.get('native_delta')
-            if delta is None and not self.delta.invalid and extra.get('lap_valid') is True and extra.get('native_best_ms',0)>0 and isinstance(native,(float,int)) and math.isfinite(native):
+            native = (native if not self.delta.invalid and extra.get('lap_valid') is True
+                      and (extra.get('native_best_ms') or 0) > 0 and isinstance(native, (float, int))
+                      and math.isfinite(native) else None)
+            if delta is None and native is not None:
                 delta=round(native,3);delta_source='AC session best'
+            previous_gap = self.delta.previous_delta(g.normalizedCarPosition, g.iCurrentTime)
+            timing_source = 'previous lap' if previous_gap is not None else 'AC session best' if native is not None else None
+            cockpit_pace = self.delta.previous_pace(g.normalizedCarPosition, g.iCurrentTime, native)
             result = {"status": "live", "message": "LIVE · Assetto Corsa",
                     "speed": round(max(0, p.speedKmh), 1), "rpm": max(0, p.rpms),
                     "gear": "R" if p.gear == 0 else "N" if p.gear == 1 else str(p.gear - 1),
@@ -235,6 +241,8 @@ class ACReader:
                     "lap_progress": finite(g.normalizedCarPosition, 0, 1),
                     "lap": max(1, g.completedLaps + 1),
                     "lap_ms": max(0, g.iCurrentTime),
+                    "previous_lap_delta": previous_gap,
+                    "previous_lap_pace": cockpit_pace if previous_gap is not None else None,
                     "last_lap_ms": g.iLastTime if g.iLastTime > 0 else None,
                     "best_lap_ms": g.iBestTime if g.iBestTime > 0 else None,
                     "delta": delta, "delta_reference_ms": self.delta.best_ms,
@@ -243,6 +251,9 @@ class ACReader:
                     "damage_body":[finite(v,0,100000) for v in p.carDamage[:4]],
                     "delta_state": self.delta.state, "recorded_laps":len(self.delta.history),
                     "flag": g.flag, "in_pit": bool(g.isInPit or g.isInPitLane)}
+            result['cockpit_delta'] = previous_gap if previous_gap is not None else native
+            result['cockpit_delta_source'] = timing_source
+            result['cockpit_pace'] = cockpit_pace
             result.update(extra)
             result['in_pit']=bool(g.isInPit or g.isInPitLane or extra.get('in_pit') or extra.get('in_pit_lane'))
             result['gear_count'], result['gear_count_source'] = resolve_gears(result.get('gear_count'))

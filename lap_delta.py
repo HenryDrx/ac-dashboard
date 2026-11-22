@@ -1,5 +1,6 @@
 """Record observed laps; compare elapsed time at equal track distance."""
 import bisect
+from collections import deque
 from datetime import datetime, timezone
 import json
 import math
@@ -16,6 +17,7 @@ class LapDelta:
 
     def reset(self):
         self.reference = None
+        self.previous_reference = None
         self.best_ms = None
         self.reset_counter = None
         self.interrupt()
@@ -28,6 +30,9 @@ class LapDelta:
         self.started = False
         self.invalid = False
         self.state = 'Waiting for lap start'
+        self._pace_points = deque()
+        self._pace_value = None
+        self._pace_source = None
 
     def configure(self, context, root):
         key = '--'.join(re.sub(r'[^a-zA-Z0-9_-]', '_', str(x))[:80] for x in context)
@@ -48,6 +53,12 @@ class LapDelta:
             history_path=self.root / f'{key}.laps.jsonl'
             if history_path.exists():self.history=[json.loads(line) for line in history_path.read_text(encoding='utf-8').splitlines()[-100:] if line.strip()]
         except (OSError,ValueError):pass
+        for row in reversed(self.history):
+            points = row.get('points')
+            if (row.get('valid') and row.get('complete') and isinstance(points, list)
+                    and len(points) >= 2 and points[0][0] == 0 and points[-1][0] == 1):
+                self.previous_reference = [tuple(p) for p in points]
+                break
 
     def finish(self, completed, duration):
         if not self.points:return
@@ -55,6 +66,7 @@ class LapDelta:
         eligible = complete and not self.invalid
         points = list(self.points)
         if complete and points[-1][0] < 1:points.append((1., max(duration,points[-1][1])))
+        self.previous_reference = points if eligible else None
         record = dict(lap=completed+1,lap_ms=duration,complete=complete,valid=eligible,
                       status='complete' if eligible else 'invalid' if complete else 'partial',
                       samples=len(points),recorded_at=datetime.now(timezone.utc).isoformat(),points=points)
@@ -76,6 +88,7 @@ class LapDelta:
         if reset_counter is not None:
             if self.reset_counter is not None and reset_counter != self.reset_counter:
                 self.interrupt()
+                self.previous_reference = None
             self.reset_counter = reset_counter
         if not math.isfinite(progress) or not 0 <= progress <= 1 or current_ms < 0:
             self.interrupt();return None
@@ -103,6 +116,62 @@ class LapDelta:
         a,b=self.reference[i-1],self.reference[i]
         estimated=a[1]+(b[1]-a[1])*(progress-a[0])/(b[0]-a[0])
         return round((current_ms-estimated)/1000,3)
+
+    def _previous_delta_ms(self, progress, current_ms):
+        """Unrounded gap at equal distance, for both the number and pace trend."""
+        points = self.previous_reference
+        if (not points or self.invalid or not math.isfinite(progress) or not 0 <= progress <= 1
+                or not math.isfinite(current_ms) or current_ms < 0):
+            return None
+        index = bisect.bisect_right(points, (progress, float('inf')))
+        if index == 0:return None
+        if index >= len(points):
+            return current_ms - points[-1][1]
+        a, b = points[index - 1], points[index]
+        expected = a[1] + (b[1] - a[1]) * (progress - a[0]) / (b[0] - a[0])
+        return current_ms - expected
+
+    def previous_delta(self, progress, current_ms):
+        """Accumulated gap against the preceding complete valid lap, in seconds."""
+        gap = self._previous_delta_ms(progress, current_ms)
+        return None if gap is None else round(gap / 1000, 3)
+
+    def previous_pace(self, progress, current_ms, native_gap=None):
+        """Current gain/loss rate in s/s: positive = losing, negative = gaining.
+
+        Differentiate the equal-distance gap over roughly 350 ms. This compares
+        local progress through the track to the same preceding lap as the number;
+        it does not mix CSP's session-best comparison with our previous-lap one.
+        """
+        gap = self._previous_delta_ms(progress, current_ms)
+        source = 'previous'
+        if gap is None and native_gap is not None and not self.invalid:
+            gap = native_gap * 1000
+            source = 'native'
+        points = self._pace_points
+        if source != self._pace_source:
+            points.clear()
+            self._pace_value = None
+            self._pace_source = source
+        if gap is None:
+            points.clear();self._pace_value = None;return None
+        if points:
+            last_ms, _, last_progress = points[-1]
+            if (current_ms < last_ms or current_ms - last_ms > 500
+                    or progress < last_progress - .001 or progress - last_progress > .05):
+                points.clear();self._pace_value = None
+            elif current_ms == last_ms:
+                return None if self._pace_value is None else round(self._pace_value, 4)
+        elapsed = current_ms - points[-1][0] if points else 0
+        points.append((current_ms, gap, progress))
+        while len(points) > 2 and current_ms - points[1][0] >= 350:
+            points.popleft()
+        span = current_ms - points[0][0]
+        if span < 200:return None
+        rate = (gap - points[0][1]) / span
+        alpha = 1 - math.exp(-elapsed / 120)
+        self._pace_value = rate if self._pace_value is None else self._pace_value + alpha * (rate - self._pace_value)
+        return round(self._pace_value, 4)
 
     def summary(self):
         return dict(state=self.state,reference_ms=self.best_ms,storage_error=self.storage_error,

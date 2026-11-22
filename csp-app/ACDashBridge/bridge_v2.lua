@@ -173,8 +173,56 @@ local function apply(id, value, car, sim)
   if result == false then error('AC rejected this change in the current session') end
 end
 
+-- Bind through CSP so the selected device and the knob directions are saved
+-- by AC, even if controller order changes.
+local cockpitStep = 0
+local cockpitBindings = {}
+local mozaKnobDown = {}
+local mozaKnobDevice
+local nextWheelScan = 0
+if ac.ControlButton then
+  for _, binding in ipairs({{'Next cockpit mode', 1}, {'Previous cockpit mode', -1}}) do
+    local label, step = binding[1], binding[2]
+    local button = ac.ControlButton('ACDash/' .. label)
+    cockpitBindings[#cockpitBindings + 1] = {
+      label = label,
+      button = button,
+      listener = button:onPressed(function() cockpitStep = cockpitStep + step end)
+    }
+  end
+end
+
+local function pollMozaKnob(now)
+  if not (ac.getJoystickCount and ac.getJoystickName and ac.isJoystickButtonPressed) then return end
+  if now >= nextWheelScan then
+    nextWheelScan = now + 1
+    local found
+    for index = 0, ac.getJoystickCount() - 1 do
+      local name = (ac.getJoystickName(index) or ''):lower()
+      if name:find('moza r9', 1, true) then
+        found = index
+        break
+      end
+    end
+    if found ~= mozaKnobDevice then mozaKnobDown = {} end
+    mozaKnobDevice = found
+  end
+  if not mozaKnobDevice then return end
+  -- Content Manager shows buttons 48 and 47 as 1-based labels.
+  -- CSP reads their zero-based DirectInput indexes.
+  for i, input in ipairs({47, 46}) do
+    local binding = cockpitBindings[i]
+    local down = ac.isJoystickButtonPressed(mozaKnobDevice, input)
+    if down and mozaKnobDown[input] == false and not (binding and binding.button:configured()) then
+      cockpitStep = cockpitStep + (i == 1 and 1 or -1)
+    end
+    mozaKnobDown[input] = down
+  end
+end
+
 function script.update(dt)
   local now = os.preciseClock()
+  pollMozaKnob(now)
   if deployUntil then
     if now < deployUntil then ac.setKERS(true) else ac.setKERS(false);deployUntil=nil end
   end
@@ -184,6 +232,7 @@ function script.update(dt)
   local active = car and car.physicsAvailable and not sim.isReplayActive
   local payload = {protocol=2,active=active and true or false,bridge_id=bridgeID,ack=ack}
   if active then
+    if #cockpitBindings > 0 or mozaKnobDevice then payload.cockpit_step = cockpitStep end
     local id = ac.getCarID(0)
     if not cachedControls or cachedCar~=id or now>=nextControlsAt then
       cachedControls,cachedEdit=controls(car,sim);cachedCar=id;nextControlsAt=now+.2
@@ -269,4 +318,9 @@ function script.windowMain()
   ui.text('AC Dash: telemetry + supported car controls')
   ui.text('Phone commands only apply when you tap a control.')
   ui.text('Last command: '..ack.message)
+  ui.text((mozaKnobDevice and 'R9 auto: 48 next / 47 previous' or 'Wheel input: assign below') .. ' | Step: ' .. cockpitStep)
+  for _, binding in ipairs(cockpitBindings) do
+    ui.text(binding.label)
+    binding.button:control()
+  end
 end

@@ -23,7 +23,7 @@ def install(root=None):
     target.mkdir(parents=True,exist_ok=True)
     for name in ('ACDashBridge.lua','bridge_v2.lua','manifest.ini'):
         shutil.copy2(source/name,target/name)
-    print(f'Installed AC Dash Bridge 2.4 to {target}')
+    print(f'Installed AC Dash Bridge 2.7 to {target}')
     print('Restart the AC driving session. Enable AC Dash Bridge in the Lua-app list if it is not running.')
 
 

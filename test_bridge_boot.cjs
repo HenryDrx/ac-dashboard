@@ -7,6 +7,8 @@ local clock=100
 os.preciseClock=function() return clock end
 script={}
 local maps={}
+local wheelCallbacks={}
+local knobDown={}
 local car={physicsAvailable=true,racePosition=12,compoundIndex=0,gearCount=7,tractionControlModes=2,tractionControlMode=1,absModes=3,absMode=1,engineBrakeSettingsCount=0,turboCount=0,wiperModes=0,position={x=10,y=0,z=20},look={x=1,z=0},side={x=0,z=1},aabbSize={x=2,z=4.5},wheels={}}
 for i=0,3 do car.wheels[i]={tyreWear=0} end
 local opponents={
@@ -16,6 +18,12 @@ local opponents={
  [4]={isConnected=true,isActive=true,position={x=11,y=8,z=20},look={x=1,z=0},aabbSize={x=2,z=4}}
 }
 ac={
+ ControlButton=function(id)
+   return {configured=function() return false end, onPressed=function(_, callback) wheelCallbacks[id]=callback; return {} end}
+ end,
+ getJoystickCount=function() return 2 end,
+ getJoystickName=function(i) return i==0 and 'Other controller' or 'MOZA R9 Base' end,
+ isJoystickButtonPressed=function(i,button) return i==1 and knobDown[button]==true end,
  SessionType={Race=3},
  writeMemoryMappedFile=function(name,layout) maps[name]=maps[name] or {packetId=0,length=0,data={}};return maps[name] end,
  readMemoryMappedFile=function() error('No command mapping exists yet') end,
@@ -34,6 +42,19 @@ const checks=`
 assert(maps['AcTools.CSP.Limited.ACDash.command2'],'Command channel must exist before first command')
 script.update(.05)
 assert(payload.active and payload.gear_count==7 and #payload.controls>0,'Boot must publish telemetry without any command')
+assert(payload.cockpit_step==0)
+wheelCallbacks['ACDash/Next cockpit mode']()
+wheelCallbacks['ACDash/Next cockpit mode']()
+wheelCallbacks['ACDash/Previous cockpit mode']()
+clock=clock+.05;script.update(.05)
+assert(payload.cockpit_step==1,'The snapshot should preserve the net movement between telemetry frames')
+knobDown[47]=true;clock=clock+.001;script.update(.001)
+knobDown[47]=false;clock=clock+.05;script.update(.05)
+assert(payload.cockpit_step==2,'A short clockwise pulse is retained across the publication throttle')
+knobDown[46]=true;clock=clock+.05;script.update(.05)
+assert(payload.cockpit_step==1,'Counterclockwise input must step backward')
+clock=clock+.05;script.update(.05)
+assert(payload.cockpit_step==1,'Holding the input must not repeat it')
 assert(payload.world_position[1]==10 and payload.world_forward[1]==1)
 assert(payload.race_position==12 and payload.is_race)
 assert(#payload.map_cars==3,'Map must include far-away active connected cars, including other elevations')

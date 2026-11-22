@@ -43,6 +43,8 @@ def mock_sample():
             "tc": 1, "abs": 1, "drs": None, "drs_available": None, "kers": None,
             "session": 2, "is_race":True,"position":3, "lap_progress": progress,
             "lap": 3, "lap_ms": int(progress * 92000), "last_lap_ms": 93520,
+            "previous_lap_delta": round(math.sin(t / 7) * .45, 3),
+            "previous_lap_pace": round(math.cos(t / 7) * .45 / 7, 4),
             "best_lap_ms": 92000, "delta": round(math.sin(t / 7) * .45, 3),
             "delta_reference_ms": 92000, "flag": 0, "in_pit": False,
             "csp_connected": True, "steering_deg": round(math.sin(t/3)*120,1),
@@ -215,7 +217,7 @@ def create_app(mock=False, ac_root=None):
 
     app.cleanup_ctx.append(lifecycle)
     app.router.add_get("/", index)
-    app.router.add_get("/{name:app.js|style.css|manifest.webmanifest}", asset)
+    app.router.add_get("/{name:app.js|style.css|layout.js|layout.css|cockpit.js|cockpit.css|manifest.webmanifest}", asset)
     app.router.add_get("/ws", websocket)
     app.router.add_get('/api/control-info',control_info)
     app.router.add_post('/api/control',control_command)
@@ -245,6 +247,7 @@ def create_app(mock=False, ac_root=None):
     app.router.add_get('/api/map-image',map_image)
     app.router.add_get('/api/car-badge',car_badge)
     app.router.add_static('/fonts/',ROOT/'web'/'fonts')
+    app.router.add_static('/assets/',ROOT/'web'/'assets')
     return app
 
 
